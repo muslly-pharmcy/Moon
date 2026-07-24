@@ -1,0 +1,41 @@
+// @lovable.dev/vite-tanstack-config already includes the following — do NOT add them manually
+// or the app will break with duplicate plugins:
+//   - tanstackStart, viteReact, tailwindcss, tsConfigPaths, nitro (build-only using cloudflare as a default target),
+//     componentTagger (dev-only), VITE_* env injection, @ path alias, React/TanStack dedupe,
+//     error logger plugins, and sandbox detection (port/host/strictPort).
+// You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { loadEnv } from "vite";
+import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/tanstack/vite";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Server-only env vars (no VITE_ prefix) needed by server routes such as
+// the auth email webhook (SUPABASE_SERVICE_ROLE_KEY, LOVABLE_API_KEY).
+// Do NOT add these keys to envDefine — that would leak secrets to the client.
+const serverEnv = loadEnv(process.env.NODE_ENV || "development", process.cwd(), "");
+Object.assign(process.env, serverEnv);
+
+export default defineConfig({
+  tanstackStart: {
+    // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
+    // nitro/vite builds from this
+    server: { entry: "server" },
+    ssr: false,
+  },
+  vite: {
+    plugins: [mcpPlugin()],
+    resolve: {
+      // React Email's bundled htmlparser2 still imports the legacy
+      // `entities/lib/decode.js` subpath. v6+ exposes the same modules under
+      // `dist/esm/`. Repoint the legacy paths so SSR bundling resolves them.
+      alias: {
+        "entities/lib/decode.js": path.resolve(__dirname, "node_modules/entities/dist/esm/decode.js"),
+        "entities/lib/encode.js": path.resolve(__dirname, "node_modules/entities/dist/esm/encode.js"),
+      },
+
+    },
+  },
+});
